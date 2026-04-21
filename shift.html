@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Work Hours Tracker</title>
+
+    <style>
+      body {
+        font-family: cursive;
+        background: #d39ebb;
+        color: #f9f6f6;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .container {
+        background: linear-gradient(145deg, #434ca1, #8e6cb1);
+        padding: 20px;
+        border-radius: 16px;
+        width: 450px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+
+      h2 {
+        text-align: center;
+        margin-bottom: 15px;
+      }
+
+      input {
+        width: 95%;
+        padding: 10px;
+        margin: 8px 0;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+      }
+
+      button {
+        background: #811751;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+        margin-bottom: 10px;
+        padding: 8px;
+        width: 30%;
+        border-radius: 6px;
+      }
+
+      button:hover {
+        background: #434ca1;
+      }
+
+      .entry {
+        background: #3b3b3f;
+        padding: 10px;
+        margin-top: 10px;
+        border-radius: 10px;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .delete-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+      }
+
+      #entries {
+        max-height: 200px;
+        overflow-y: auto;
+        display: none;
+      }
+
+      #stats {
+        display: none;
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+
+      .stat-item {
+        background: rgba(0, 0, 0, 0.25);
+        padding: 10px;
+        border-radius: 10px;
+        text-align: center;
+      }
+
+      #monthBox {
+        margin-bottom: 10px;
+        text-align: center;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h2>Work Hours Tracker</h2>
+
+      <div id="monthBox"></div>
+
+      <label>Date:</label>
+      <input type="date" id="date" />
+
+      <label>Start Time:</label>
+      <input type="time" id="start" />
+
+      <label>End Time:</label>
+      <input type="time" id="end" />
+
+      <label>Hourly Rate (€):</label>
+      <input type="number" id="rate" step="0.1" />
+
+      <button onclick="addEntry()">Add Shift</button>
+      <button onclick="toggleList()">All Dates</button>
+      <button onclick="toggleStats()">Stats</button>
+
+      <div id="entries"></div>
+      <div id="stats"></div>
+    </div>
+
+    <script>
+      const dateInput = document.getElementById("date");
+      const startInput = document.getElementById("start");
+      const endInput = document.getElementById("end");
+      const rateInput = document.getElementById("rate");
+
+      const entriesDiv = document.getElementById("entries");
+      const statsDiv = document.getElementById("stats");
+      const monthBox = document.getElementById("monthBox");
+
+      let listVisible = false;
+      let statsVisible = false;
+
+      dateInput.value = new Date().toISOString().split("T")[0];
+      startInput.value = localStorage.getItem("defaultStart") || "09:00";
+      endInput.value = localStorage.getItem("defaultEnd") || "17:00";
+      rateInput.value = localStorage.getItem("hourlyRate") || "13.9";
+
+      const monthName = new Date().toLocaleString("default", { month: "long" });
+      const currentMonth = new Date().toISOString().slice(0, 7);
+
+      function saveDefaults() {
+        localStorage.setItem("defaultStart", startInput.value);
+        localStorage.setItem("defaultEnd", endInput.value);
+        localStorage.setItem("hourlyRate", rateInput.value);
+      }
+
+      startInput.onchange = saveDefaults;
+      endInput.onchange = saveDefaults;
+      rateInput.onchange = saveDefaults;
+
+      function getEntries() {
+        return JSON.parse(localStorage.getItem("entries") || "[]");
+      }
+
+      function saveEntries(e) {
+        localStorage.setItem("entries", JSON.stringify(e));
+      }
+
+      function calculateHours(s, e) {
+        const [sh, sm] = s.split(":").map(Number);
+        const [eh, em] = e.split(":").map(Number);
+
+        const a = new Date();
+        a.setHours(sh, sm);
+        const b = new Date();
+        b.setHours(eh, em);
+
+        let diff = (b - a) / 3600000;
+        if (diff < 0) diff += 24;
+        return diff;
+      }
+
+      function formatTime(h) {
+        let hh = Math.floor(h);
+        let mm = Math.round((h - hh) * 60);
+        if (mm === 60) {
+          hh++;
+          mm = 0;
+        }
+        return `${hh}h ${mm}m`;
+      }
+
+      function addEntry() {
+        const date = dateInput.value;
+        const start = startInput.value;
+        const end = endInput.value;
+
+        if (!date || !start || !end) return alert("Fill all fields");
+
+        const entries = getEntries();
+
+        entries.push({
+          id: crypto.randomUUID(),
+          date,
+          start,
+          end,
+          hours: calculateHours(start, end),
+          rate: parseFloat(rateInput.value) || 13.9
+        });
+
+        saveEntries(entries);
+        render();
+      }
+
+      function toggleList() {
+        listVisible = !listVisible;
+        entriesDiv.style.display = listVisible ? "block" : "none";
+      }
+
+      function toggleStats() {
+        statsVisible = !statsVisible;
+        statsDiv.style.display = statsVisible ? "grid" : "none";
+        render();
+      }
+
+      function deleteEntry(id) {
+        const entries = getEntries().filter((e) => e.id !== id);
+        saveEntries(entries);
+        render();
+      }
+
+      function render() {
+        let entries = getEntries().sort(
+          (a, b) => new Date(b.date) - new Date(a.date)
+        );
+
+        entriesDiv.innerHTML = "";
+
+        let totalHours = 0;
+        let totalMoney = 0;
+
+        let monthHours = 0;
+        let monthMoney = 0;
+
+        entries.forEach((e) => {
+          const r = e.rate ?? 13.9;
+
+          totalHours += e.hours;
+          totalMoney += e.hours * r;
+
+          if (e.date.startsWith(currentMonth)) {
+            monthHours += e.hours;
+            monthMoney += e.hours * r;
+          }
+
+          const div = document.createElement("div");
+          div.className = "entry";
+
+          div.innerHTML = `
+            <div>
+              <strong>${e.date}</strong><br>
+              ${e.start} - ${e.end} = ${formatTime(e.hours)}
+            </div>
+            <button class="delete-btn" onclick="deleteEntry('${e.id}')">🗑️</button>
+          `;
+
+          entriesDiv.appendChild(div);
+        });
+
+        // ✅ FIXED MONTH BOX (fully independent of input rate)
+        monthBox.textContent =
+          `${monthName}: ${formatTime(monthHours)} , €${monthMoney.toFixed(2)}`;
+
+        if (statsVisible) {
+          let longest = 0;
+          let shortest = entries.length ? entries[0].hours : 0;
+
+          entries.forEach((e) => {
+            if (e.hours > longest) longest = e.hours;
+            if (e.hours < shortest) shortest = e.hours;
+          });
+
+          const avg = entries.length ? totalHours / entries.length : 0;
+
+          statsDiv.innerHTML = `
+            <div class="stat-item">Total Hours: ${formatTime(totalHours)}</div>
+            <div class="stat-item">Total Earnings: €${totalMoney.toFixed(2)}</div>
+            <div class="stat-item">Avg. shift: ${formatTime(avg)}</div>
+            <div class="stat-item">Total Shifts: ${entries.length}</div>
+            <div class="stat-item">Longest: ${formatTime(longest)}</div>
+            <div class="stat-item">Shortest: ${formatTime(shortest)}</div>
+          `;
+        }
+      }
+
+      render();
+    </script>
+  </body>
+</html>
